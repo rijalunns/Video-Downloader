@@ -110,44 +110,136 @@ async function startServer() {
           return res.status(500).json({ error: "TikTok API error: " + tkError.message });
         }
       } else if (url.includes("instagram.com") || url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com")) {
-        // Facebook & Instagram
+        // Facebook & Instagram using public API proxies
+        
+        // Clean URL to remove tracking parameters but keep essential parts
+        let cleanUrl = url;
+        try {
+          const urlObj = new URL(url);
+          urlObj.search = ""; 
+          cleanUrl = urlObj.toString();
+        } catch (e) {
+          cleanUrl = url;
+        }
+
         const apis = [
-          `https://api.vkrdown.com/server/?url=${encodeURIComponent(url)}`,
-          `https://api.vkrdown.com/api/main.php?url=${encodeURIComponent(url)}`
-        ];
-
-        for (const apiUrl of apis) {
-          try {
-            const response = await axios.get(apiUrl, { timeout: 10000 });
-            const data = response.data;
-
-            if (data && (data.status === "success" || data.data || data.url)) {
-              const videoData = data.data || data;
-              const medias = videoData.medias || (videoData.url ? [{ url: videoData.url, quality: "HD", extension: "mp4" }] : []);
-              
+          // Cobalt API (Primary)
+          async (u: string) => {
+            const res = await axios.post("https://api.cobalt.tools/api/json", {
+              url: u,
+              vQuality: "720",
+              vCodec: "h264",
+              isAudioOnly: false,
+              isNoTTWatermark: true
+            }, {
+              headers: { 
+                "Accept": "application/json", 
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Origin": "https://cobalt.tools",
+                "Referer": "https://cobalt.tools/",
+                "x-requested-with": "XMLHttpRequest"
+              },
+              timeout: 15000
+            });
+            
+            if (res.data.status === "stream" || res.data.status === "redirect") {
+              return {
+                platform: u.includes("instagram") ? "instagram" : "facebook",
+                title: "Social Media Video",
+                thumbnail: "",
+                formats: [{ quality: "HD", url: res.data.url, container: "mp4", hasVideo: true, hasAudio: true }]
+              };
+            }
+            if (res.data.status === "picker") {
+              return {
+                platform: u.includes("instagram") ? "instagram" : "facebook",
+                title: "Social Media Gallery",
+                thumbnail: res.data.picker[0].thumb || "",
+                formats: res.data.picker.map((p: any, i: number) => ({
+                  quality: `Item ${i + 1}`,
+                  url: p.url,
+                  container: "mp4",
+                  hasVideo: true,
+                  hasAudio: true
+                }))
+              };
+            }
+            throw new Error(`Cobalt status: ${res.data.status}`);
+          },
+          // SnapSave / TikWM Style API (Secondary)
+          async (u: string) => {
+            // Using a different public endpoint that often works for IG/FB
+            const res = await axios.get(`https://api.vkrdown.com/api/main.php?url=${encodeURIComponent(u)}`, { 
+              timeout: 12000,
+              headers: { 
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+              }
+            });
+            
+            if (res.data && (res.data.status === "success" || res.data.data)) {
+              const videoData = res.data.data || res.data;
+              const medias = videoData.medias || [];
               if (medias.length > 0) {
-                return res.json({
-                  platform: url.includes("instagram") ? "instagram" : "facebook",
+                return {
+                  platform: u.includes("instagram") ? "instagram" : "facebook",
                   title: videoData.title || "Social Media Video",
-                  thumbnail: videoData.thumbnail || videoData.cover || "",
+                  thumbnail: videoData.thumbnail || "",
                   formats: medias.map((m: any) => ({
-                    quality: m.quality || m.resolution || "Download",
+                    quality: m.quality || "Download",
                     url: m.url,
-                    container: m.extension || "mp4",
+                    container: "mp4",
                     hasVideo: true,
                     hasAudio: true
                   }))
-                });
+                };
               }
             }
-          } catch (err) {
+            throw new Error("Fallback API failed");
+          },
+          // Third Fallback: RapidAPI style or other public proxies
+          async (u: string) => {
+            const res = await axios.get(`https://api.downloadit.net/api/v1/download?url=${encodeURIComponent(u)}`, {
+              timeout: 10000,
+              headers: { "User-Agent": "Mozilla/5.0" }
+            }).catch(() => ({ data: null }));
+            
+            if (res.data && res.data.medias) {
+              return {
+                platform: u.includes("instagram") ? "instagram" : "facebook",
+                title: "Social Media Video",
+                thumbnail: "",
+                formats: res.data.medias.map((m: any) => ({
+                  quality: m.quality || "HD",
+                  url: m.url,
+                  container: "mp4",
+                  hasVideo: true,
+                  hasAudio: true
+                }))
+              };
+            }
+            throw new Error("Third fallback failed");
+          }
+        ];
+
+        for (const apiFn of apis) {
+          try {
+            let result;
+            try {
+              result = await apiFn(cleanUrl);
+            } catch (e) {
+              result = await apiFn(url);
+            }
+            if (result) return res.json(result);
+          } catch (err: any) {
+            console.warn(`[API Fallback] Failed:`, err.response?.status || err.message);
             continue;
           }
         }
 
         return res.status(400).json({ 
           error: "Extraction Failed", 
-          message: "Could not extract video. The post might be private or the API is down." 
+          message: "Instagram and Facebook have extremely high security. The cloud server is currently blocked (403). Please ensure the post is PUBLIC and try again later, or try a different link." 
         });
       } else {
         return res.status(400).json({ error: "Unsupported platform or invalid URL" });

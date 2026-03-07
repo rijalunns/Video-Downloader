@@ -101,6 +101,14 @@ export default function App() {
 
         {/* Main Control Panel */}
         <div className="p-6 space-y-6">
+          {/* Small Warning Alert */}
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 flex items-center gap-2.5">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <p className="text-amber-500/90 text-[10px] font-medium leading-tight">
+              Downloader untuk Instagram dan Facebook masih sering bermasalah karena pembatasan platform.
+            </p>
+          </div>
+
           <form onSubmit={handleFetch} className="space-y-4">
             <div className="relative group">
               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
@@ -133,6 +141,25 @@ export default function App() {
               )}
             </button>
           </form>
+
+          {/* Tips Section - Only show when no video is loaded */}
+          {!videoInfo && !loading && !error && (
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+              <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">Supported Platforms</p>
+              <div className="flex justify-around items-center opacity-50 grayscale hover:grayscale-0 transition-all">
+                <Youtube className="w-6 h-6 text-red-500" />
+                <Instagram className="w-6 h-6 text-pink-500" />
+                <Facebook className="w-6 h-6 text-blue-600" />
+                <Music2 className="w-6 h-6 text-white" />
+              </div>
+              <div className="pt-2 border-t border-white/5">
+                <p className="text-white/30 text-[10px] leading-relaxed">
+                  * Ensure social media posts are <span className="text-emerald-500">PUBLIC</span>.<br />
+                  * Private or restricted content cannot be extracted.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Error Display */}
           <AnimatePresence>
