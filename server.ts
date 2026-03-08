@@ -3,10 +3,15 @@ import { createServer as createViteServer } from "vite";
 import ytdl from "@distube/ytdl-core";
 import axios from "axios";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(cors());
   app.use(express.json());
@@ -169,7 +174,6 @@ async function startServer() {
           },
           // SnapSave / TikWM Style API (Secondary)
           async (u: string) => {
-            // Using a different public endpoint that often works for IG/FB
             const res = await axios.get(`https://api.vkrdown.com/api/main.php?url=${encodeURIComponent(u)}`, { 
               timeout: 12000,
               headers: { 
@@ -197,7 +201,7 @@ async function startServer() {
             }
             throw new Error("Fallback API failed");
           },
-          // Third Fallback: RapidAPI style or other public proxies
+          // Third Fallback
           async (u: string) => {
             const res = await axios.get(`https://api.downloadit.net/api/v1/download?url=${encodeURIComponent(u)}`, {
               timeout: 10000,
@@ -250,7 +254,7 @@ async function startServer() {
     }
   });
 
-  // Proxy for downloading to avoid CORS issues and CDN blocks
+  // Proxy for downloading
   app.get("/api/download", async (req, res) => {
     const { url, filename } = req.query;
     if (!url) return res.status(400).send("URL required");
@@ -265,7 +269,7 @@ async function startServer() {
           "Referer": "https://www.tiktok.com/",
           "Accept": "*/*"
         },
-        timeout: 20000 // 20 seconds timeout
+        timeout: 20000 
       });
 
       const cleanFilename = (filename as string || "video").replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -279,7 +283,15 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
+  // Catch-all for undefined API routes (PENTING: Agar tidak mengembalikan HTML saat API error)
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ 
+      error: "API Route Not Found", 
+      message: `Rute ${req.method} ${req.path} tidak ditemukan di server.` 
+    });
+  });
+
+  // Vite / Static Files Handling
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -287,11 +299,17 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    const distPath = path.resolve(__dirname, "dist");
+    app.use(express.static(distPath));
+    
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api")) return next();
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT} (NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
   });
 }
 

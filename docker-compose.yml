@@ -1,0 +1,10 @@
+services:
+  downloader:
+    build: .
+    container_name: media-downloader
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+    restart: always

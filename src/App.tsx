@@ -46,7 +46,14 @@ export default function App() {
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
         console.error("Server response was not JSON:", text);
-        throw new Error("Server returned an invalid response. The service might be temporarily busy or restarting. Please try again in a few seconds.");
+        
+        if (text.includes("<!doctype html>") || text.includes("<html>")) {
+          throw new Error("Server Error: Permintaan API Anda justru mengembalikan halaman HTML. Ini biasanya terjadi jika server backend (Node.js) tidak berjalan dengan benar di Docker/VPS, atau rute API terhalang oleh konfigurasi proxy/Nginx.");
+        } else if (text.includes("502 Bad Gateway")) {
+          throw new Error("VPS Error: 502 Bad Gateway. Server backend (Node.js) mati atau crash.");
+        }
+        
+        throw new Error("Server returned an invalid response. Pastikan Anda sudah menjalankan 'npm run build' di Docker/VPS.");
       }
 
       const data = await response.json();
